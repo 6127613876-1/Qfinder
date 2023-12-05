@@ -1,70 +1,81 @@
-# Getting Started with Create React App
+# question_generator
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Question Generator is an NLP system for generating reading comprehension-style questions from texts such as news articles or pages excerpts from books. The system is built using pretrained models from [HuggingFace Transformers](https://github.com/huggingface/transformers). There are two models: the question generator itself, and the QA evaluator which ranks and filters the question-answer pairs based on their acceptability.
 
-## Available Scripts
+## Update 2021/11/29
 
-In the project directory, you can run:
+### Updated training scripts
 
-### `npm start`
+The training notebooks have been updated with training scripts. To run:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```bash
+python question_generator/training/qg_train.py
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```bash
+python question_generator/training/qa_eval_train.py
+```
 
-### `npm test`
+Hyperparameters can be changed using commandline arguments. See the scripts for the list of available arguments.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Datasets uploaded to Huggingface Hub
 
-### `npm run build`
+The datasets have been uploaded to the Huggingface Hub:
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- [question generator training and validation data](https://huggingface.co/datasets/iarfmoose/question_generator)
+- [qa evaluator training and validation data](https://huggingface.co/datasets/iarfmoose/qa_evaluator)
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Usage
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+The easiest way to generate some questions is to clone the github repo and then run `qg_run.py` like this:
 
-### `npm run eject`
+```
+git clone https://github.com/amontgomerie/question_generator
+cd question_generator
+pip install -r requirements.txt -qq
+python run_qg.py --text_file articles/twitter_hack.txt
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+This will generate 10 question-answer pairs of mixed style (full-sentence and multiple choice) based on the article specified in `--text_file` and print them to the console. For more information see the qg_commandline_example notebook.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+The `QuestionGenerator` class can also be instantiated and used like this:
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+```python
+from questiongenerator import QuestionGenerator
+qg = QuestionGenerator()
+qg.generate(text, num_questions=10)
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+This will generate 10 questions of mixed style and return a list of dictionaries containing question-answer pairs. In the case of multiple choice questions, the answer will contain a list of dictionaries containing the answers and a boolean value stating if the answer is correct or not. The output can be easily printed using the `print_qa()` function. For more information see the question_generation_example notebook.
 
-## Learn More
+### Choosing the number of questions
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+The desired number of questions can be passed as a command line argument using `--num_questions` or as an argument when calling `qg.generate(text, num_questions=20`. If the chosen number of questions is too large, then the model may not be able to generate enough. The maximum number of questions will depend on the length of the input text, or more specifically the number of sentences and named entities containined within text. Note that the quality of some of the outputs will decrease for larger numbers of questions, as the QA Evaluator ranks generated questions and returns the best ones.
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Answer styles
 
-### Code Splitting
+The system can generate questions with full-sentence answers (`'sentences'`), questions with multiple-choice answers (`'multiple_choice'`), or a mix of both (`'all'`). This can be selected using the `--answer_style` or `qg.generate(answer_style=<style>)` arguments.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## Models
 
-### Analyzing the Bundle Size
+### Question Generator
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+The question generator model takes a text as input and outputs a series of question and answer pairs. The answers are sentences and phrases extracted from the input text. The extracted phrases can be either full sentences or named entities extracted using [spaCy](https://spacy.io/). Named entities are used for multiple-choice answers. The wrong answers will be other entities of the same type found in the text. The questions are generated by concatenating the extracted answer with the full text (up to a maximum of 512 tokens) as context in the following format:
 
-### Making a Progressive Web App
+```
+answer_token <extracted answer> context_token <context>
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+The concatenated string is then encoded and fed into the question generator model. The model architecture is `t5-base`. The pretrained model was finetuned as a sequence-to-sequence model on a dataset made up several well-known QA datasets ([SQuAD](https://rajpurkar.github.io/SQuAD-explorer/), [RACE](http://www.cs.cmu.edu/~glai1/data/race/), [CoQA](https://stanfordnlp.github.io/coqa/), and [MSMARCO](https://microsoft.github.io/msmarco/)). The datasets were restructured by concatenating the answer and context fields into the previously mentioned format. The concatenated answer and context was then used as an input for training, and the question field became the targets.
 
-### Advanced Configuration
+The datasets can be found [here](https://drive.google.com/drive/folders/1JtliZ5FyCmczc7e-iJXUoRplKVaWql8s?usp=sharing).
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+### QA Evaluator
 
-### Deployment
+The QA evaluator takes a question answer pair as an input and outputs a value representing its prediction about whether the input was a valid question and answer pair or not. The model is `bert-base-cased` with a sequence classification head. The pretrained model was finetuned on the same data as the question generator model, but the context was removed. The question and answer were concatenated 50% of the time. In the other 50% of the time a corruption operation was performed (either swapping the answer for an unrelated answer, or by copying part of the question into the answer). The model was then trained to predict whether the input sequence represented one of the original QA pairs or a corrupted input.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+The input for the QA evaluator follows the format for `BertForSequenceClassification`, but using the question and answer as the two sequences. It is the following format:
 
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+```
+[CLS] <question> [SEP] <answer [SEP]
+```
